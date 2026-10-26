@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified in 2026 for this project: removed uniform subsampling and aligned populated buffers.
  */
 
 package com.google.ar.core.examples.java.rawdepth;
@@ -64,13 +66,14 @@ public final class PointCloudHelper {
     // `pointLimit` we do uniform image subsampling. Alternatively we could reduce
     // the number of
     // points based on depth confidence at this stage.
+    int step = calculateImageSubsamplingStep(depthWidth, depthHeight, pointLimit);
     FloatBuffer points = FloatBuffer.allocate(
-        depthWidth * depthHeight * Renderer.POSITION_FLOATS_PER_POINT);
+        depthWidth / step * depthHeight / step * Renderer.POSITION_FLOATS_PER_POINT);
 
-    for (int y = 0; y < depthHeight; y += 1) {
-      for (int x = 0; x < depthWidth; x += 1) {
+    for (int y = 0; y < depthHeight; y += step) {
+      for (int x = 0; x < depthWidth; x += step) {
         // Depth images are tightly packed, so it's OK to not use row and pixel strides.
-        int depthMillimeters = depthBuffer.get(y * depthWidth + x) & 0xffff; // Unsigned mm.
+        int depthMillimeters = depthBuffer.get(y * depthWidth + x); // Depth image pixels are in mm.
         if (depthMillimeters == 0) {
           // A pixel that has a value of zero has a missing depth estimate at this
           // location.
@@ -94,7 +97,7 @@ public final class PointCloudHelper {
       }
     }
 
-    points.flip(); // Only expose populated points; missing depth pixels were skipped.
+    points.rewind();
 
     return points;
   }
@@ -151,13 +154,14 @@ public final class PointCloudHelper {
     ShortBuffer depthBuffer = depthImagePlane.getBuffer().order(ByteOrder.nativeOrder()).asShortBuffer();
 
     // Allocate the destination color buffer.
+    int step = calculateImageSubsamplingStep(depthWidth, depthHeight, pointLimit);
     FloatBuffer colors = FloatBuffer.allocate(
-        depthWidth * depthHeight * Renderer.COLOR_FLOATS_PER_POINT);
+        depthWidth / step * depthHeight / step * Renderer.COLOR_FLOATS_PER_POINT);
 
     float rgb[] = new float[3]; // Reusable space for 3-channel color values.
 
-    for (int y = 0; y < depthHeight; y += 1) {
-      for (int x = 0; x < depthWidth; x += 1) {
+    for (int y = 0; y < depthHeight; y += step) {
+      for (int x = 0; x < depthWidth; x += step) {
         if (depthBuffer.get(y * depthWidth + x) == 0) {
           // A pixel that has a value of zero has a missing depth estimate at this
           // location.
@@ -183,9 +187,14 @@ public final class PointCloudHelper {
       }
     }
 
-    colors.flip(); // Keep the RGB count aligned with the populated points.
+    colors.rewind();
 
     return colors;
+  }
+
+  /** Returs the increment in rows and columns to sample the image n times. */
+  private static int calculateImageSubsamplingStep(int imageWidth, int imageHeight, int n) {
+    return (int) Math.ceil(Math.sqrt((float) imageWidth * imageHeight / n));
   }
 
   /**
@@ -220,7 +229,6 @@ public final class PointCloudHelper {
   }
 
   private static final float[] TEXTURE_COORDS = new float[] {
-      0.0f, 0.0f, 0.0f, 
-      1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+      0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
   };
 }

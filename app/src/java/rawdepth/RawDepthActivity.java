@@ -12,15 +12,22 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified in 2026 for this project: added asynchronous raw-depth data export.
  */
 
 package com.google.ar.core.examples.java.rawdepth;
 
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.UriPermission;
 import android.media.Image;
+import android.net.Uri;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Button;
 import android.widget.SeekBar;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -35,6 +42,7 @@ import com.google.ar.core.examples.java.common.helpers.DisplayRotationHelper;
 import com.google.ar.core.examples.java.common.helpers.FullScreenHelper;
 import com.google.ar.core.examples.java.common.helpers.SnackbarHelper;
 import com.google.ar.core.examples.java.common.helpers.TrackingStateHelper;
+import com.google.ar.core.examples.java.filehandling.FileHandler;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
@@ -55,10 +63,17 @@ import java.io.File;
  */
 public class RawDepthActivity extends AppCompatActivity implements GLSurfaceView.Renderer {
   private static final String TAG = RawDepthActivity.class.getSimpleName();
+  private static final int PICK_WORKSPACE_DIRECTORY = 1001;
+  private static final String STORAGE_PREFERENCES = "storage_preferences";
+  private static final String WORKSPACE_URI_KEY = "workspace_uri";
 
   // Rendering. The Renderers are created here, and initialized when the GL
   // surface is created.
   private GLSurfaceView surfaceView;
+  private Button workspaceButton;
+
+  private FileHandler fileHandler;
+  private FileHandler.ScanDirectories activeScan;
 
   private boolean installRequested;
   private boolean depthReceived;
@@ -77,17 +92,24 @@ public class RawDepthActivity extends AppCompatActivity implements GLSurfaceView
   private long depthTimestamp = -1;
 
   // DataSave Class
-  private final DataSave dataSave = new DataSave();
+  //private final DataSave dataSave = new DataSave();
 
-  private File logFile;
+  //private File logFile;
 
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
-    logFile = new File(getFilesDir(), "capture-test.jsonl");
+    //logFile = new File(getFilesDir(), "capture-test.jsonl");
     setContentView(R.layout.activity_main);
     surfaceView = findViewById(R.id.surfaceview);
+    workspaceButton = findViewById(R.id.choose_workspace_button);
+    workspaceButton.setOnClickListener(view -> chooseWorkspaceDirectory());
+
+    if (restoreWorkspaceDirectory()) {
+      workspaceButton.setText(R.string.change_workspace);
+    }
+
     displayRotationHelper = new DisplayRotationHelper(/* context= */ this);
 
     // Set up rendering.
@@ -106,6 +128,75 @@ public class RawDepthActivity extends AppCompatActivity implements GLSurfaceView
     installRequested = false;
     depthReceived = false;
 
+  }
+
+  private void chooseWorkspaceDirectory() {
+    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+    intent.addFlags(
+        Intent.FLAG_GRANT_READ_URI_PERMISSION
+            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+
+    startActivityForResult(intent, PICK_WORKSPACE_DIRECTORY);
+  }
+
+  private boolean restoreWorkspaceDirectory() {
+    SharedPreferences preferences =
+        getSharedPreferences(STORAGE_PREFERENCES, MODE_PRIVATE);
+    String uriValue = preferences.getString(WORKSPACE_URI_KEY, null);
+
+    if (uriValue == null) {
+      return false;
+    }
+
+    Uri treeUri = Uri.parse(uriValue);
+    for (UriPermission permission : getContentResolver().getPersistedUriPermissions()) {
+      if (treeUri.equals(permission.getUri())
+          && permission.isReadPermission()
+          && permission.isWritePermission()) {
+        fileHandler = new FileHandler(this, treeUri);
+        return true;
+      }
+    }
+
+    preferences.edit().remove(WORKSPACE_URI_KEY).apply();
+    return false;
+  }
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+
+    if (requestCode != PICK_WORKSPACE_DIRECTORY
+        || resultCode != RESULT_OK
+        || data == null
+        || data.getData() == null) {
+      return;
+    }
+
+    Uri treeUri = data.getData();
+    int grantedFlags =
+        data.getFlags()
+            & (Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+
+    try {
+      getContentResolver().takePersistableUriPermission(treeUri, grantedFlags);
+
+      getSharedPreferences(STORAGE_PREFERENCES, MODE_PRIVATE)
+          .edit()
+          .putString(WORKSPACE_URI_KEY, treeUri.toString())
+          .apply();
+
+      fileHandler = new FileHandler(this, treeUri);
+      activeScan = null;
+      workspaceButton.setText(R.string.change_workspace);
+      Toast.makeText(this, R.string.workspace_selected, Toast.LENGTH_SHORT).show();
+    } catch (SecurityException exception) {
+      Log.e(TAG, "Could not persist workspace permission", exception);
+      Toast.makeText(this, R.string.workspace_selection_failed, Toast.LENGTH_LONG).show();
+    }
   }
 
   private SeekBar.OnSeekBarChangeListener seekBarChangeListener = new SeekBar.OnSeekBarChangeListener() {
@@ -135,7 +226,7 @@ public class RawDepthActivity extends AppCompatActivity implements GLSurfaceView
       session.close();
       session = null;
     }
-    dataSave.shutdown();
+    //dataSave.shutdown();
 
     super.onDestroy();
   }
@@ -329,7 +420,7 @@ public class RawDepthActivity extends AppCompatActivity implements GLSurfaceView
           // Save full-resolution depth independently of the sampled rendering data.
           try {
             String line = DataSave.GetData(frame);
-            dataSave.appendAsync(logFile, line);
+            //dataSave.appendAsync(logFile, line);
           } catch (NotYetAvailableException e) {
             // Depth or confidence may not be ready yet; continue rendering.
           }

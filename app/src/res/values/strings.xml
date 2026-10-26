@@ -17,4 +17,8 @@
 <resources>
   <!-- Android app name. [CHAR_LIMIT=50]-->
   <string name="app_name">Raw Depth</string>
+  <string name="choose_workspace">Choose workspace</string>
+  <string name="change_workspace">Change workspace</string>
+  <string name="workspace_selected">Workspace selected</string>
+  <string name="workspace_selection_failed">The selected directory cannot be used</string>
 </resources>

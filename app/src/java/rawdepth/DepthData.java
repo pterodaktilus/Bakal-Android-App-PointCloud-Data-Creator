@@ -12,6 +12,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified in 2026 for this project: retained all valid depth pixels and exposed timestamps.
  */
 
 package com.google.ar.core.examples.java.rawdepth;
@@ -56,7 +58,7 @@ final class DepthData {
         Image confidenceImage = frame.acquireRawDepthConfidenceImage()) {
       // Preserve every valid depth pixel for export. A limit equal to the pixel count makes
       // both conversion helpers use step = 1, keeping point and RGB buffers aligned.
-      final int numberOfDepthPixels = 150_000_000;
+      final int numberOfDepthPixels = 15000;
 
       // To transform 2D depth pixels into 3D points we retrieve the intrinsic camera parameters
       // corresponding to the depth image. See more information about the depth values at

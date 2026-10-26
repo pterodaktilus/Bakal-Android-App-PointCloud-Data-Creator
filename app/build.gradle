@@ -12,12 +12,20 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified in 2026 for this project: updated SDK, toolchain, and dependency settings.
  */
 apply plugin: 'com.android.application'
 
 android {
     namespace "com.google.ar.core.examples.java.rawdepth"
     compileSdkVersion 37
+    sourceSets {
+        main {
+            // The manifest, Java sources, resources, and assets now share src/ as their root.
+            setRoot 'src'
+        }
+    }
     defaultConfig {
         applicationId "com.google.ar.core.examples.java.rawdepth"
 
